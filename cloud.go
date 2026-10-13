@@ -474,16 +474,9 @@ func handleSessionRequest(
 		_ = wsjson.Write(context.Background(), c, gin.H{"error": err})
 		return err
 	}
-	if currentSession != nil {
-		writeJSONRPCEvent("otherSessionConnected", nil, currentSession)
-		gadget.CancelAllAutoReleaseTimers()
-		_ = rpcKeyboardReport(0, keyboardClearStateKeys)
-		peerConn := currentSession.peerConnection
-		go func() {
-			time.Sleep(1 * time.Second)
-			_ = peerConn.Close()
-		}()
-	}
+	// Evict whatever session was active. The previous session may be using
+	// the WebSocket transport and have no peer connection to close.
+	displacePreviousSession(session, scopedLogger)
 
 	cloudLogger.Info().Interface("session", session).Msg("new session accepted")
 	cloudLogger.Trace().Interface("session", session).Msg("new session accepted")

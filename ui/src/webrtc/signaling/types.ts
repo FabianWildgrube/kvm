@@ -15,6 +15,13 @@ export interface SignalingOptions {
   /** ICE servers for this session. Omitted on the local network. */
   readonly iceServers?: RTCIceServer[];
   /**
+   * When false, the adapter does not open its signaling socket and never
+   * negotiates. Used when the session is deliberately on another transport,
+   * so a doomed WebRTC attempt cannot race it for ownership of the device.
+   * Defaults to true.
+   */
+  readonly enabled?: boolean;
+  /**
    * Called synchronously for every new RTCPeerConnection, after the adapter
    * has installed its own handlers and before negotiation starts. Anything
    * that must be part of the initial offer (transceivers, data channels) is

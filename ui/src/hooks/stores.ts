@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import { MAX_STEPS_PER_MACRO, MAX_TOTAL_MACROS, MAX_KEYS_PER_STEP } from "@/constants/macros";
+import type { DataChannelLike } from "@/transport/types";
 
 // Define the JsonRpc types for better type checking
 interface JsonRpcResponse {
@@ -129,8 +130,12 @@ export interface RTCState {
   peerConnection: RTCPeerConnection | null;
   setPeerConnection: (pc: RTCState["peerConnection"]) => void;
 
-  setRpcDataChannel: (channel: RTCDataChannel | null) => void;
-  rpcDataChannel: RTCDataChannel | null;
+  // These are DataChannelLike rather than RTCDataChannel because the
+  // WebSocket fallback transport supplies stand-ins; see
+  // @/transport/types. The terminal, serial and upload channels below stay
+  // WebRTC-only.
+  setRpcDataChannel: (channel: DataChannelLike | null) => void;
+  rpcDataChannel: DataChannelLike | null;
 
   hidRpcDisabled: boolean;
   setHidRpcDisabled: (disabled: boolean) => void;
@@ -138,17 +143,23 @@ export interface RTCState {
   rpcHidProtocolVersion: number | null;
   setRpcHidProtocolVersion: (version: number | null) => void;
 
-  rpcHidChannel: RTCDataChannel | null;
-  setRpcHidChannel: (channel: RTCDataChannel | null) => void;
+  rpcHidChannel: DataChannelLike | null;
+  setRpcHidChannel: (channel: DataChannelLike | null) => void;
 
-  rpcHidUnreliableChannel: RTCDataChannel | null;
-  setRpcHidUnreliableChannel: (channel: RTCDataChannel | null) => void;
+  rpcHidUnreliableChannel: DataChannelLike | null;
+  setRpcHidUnreliableChannel: (channel: DataChannelLike | null) => void;
 
-  rpcHidUnreliableNonOrderedChannel: RTCDataChannel | null;
-  setRpcHidUnreliableNonOrderedChannel: (channel: RTCDataChannel | null) => void;
+  rpcHidUnreliableNonOrderedChannel: DataChannelLike | null;
+  setRpcHidUnreliableNonOrderedChannel: (channel: DataChannelLike | null) => void;
 
   peerConnectionState: RTCPeerConnectionState | null;
   setPeerConnectionState: (state: RTCPeerConnectionState) => void;
+
+  // True while the WebSocket fallback transport owns the session. The
+  // connection overlays consult it so a failed WebRTC attempt that has
+  // already handed over does not keep showing a failure.
+  wsTransportActive: boolean;
+  setWsTransportActive: (active: boolean) => void;
 
   transceiver: RTCRtpTransceiver | null;
   setTransceiver: (transceiver: RTCRtpTransceiver) => void;
@@ -218,6 +229,9 @@ export const useRTCStore = create<RTCState>(set => ({
 
   peerConnectionState: null,
   setPeerConnectionState: state => set({ peerConnectionState: state }),
+
+  wsTransportActive: false,
+  setWsTransportActive: active => set({ wsTransportActive: active }),
 
   mediaStream: null,
   setMediaStream: stream => set({ mediaStream: stream, mediaStreamTrackVersion: 0 }),

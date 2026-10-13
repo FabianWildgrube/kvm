@@ -11,6 +11,24 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// hidrpcIsCancelMacro reports whether a raw HID RPC payload is a macro
+// cancellation, which must pre-empt the ordered queue rather than wait in it.
+func hidrpcIsCancelMacro(data []byte) bool {
+	if len(data) < 1 {
+		return false
+	}
+	return hidrpc.MessageType(data[0]) == hidrpc.TypeCancelKeyboardMacroReport
+}
+
+// hidrpcQueueIndex returns the ordered queue a raw HID RPC payload belongs
+// to. Out-of-range values are the caller's to handle.
+func hidrpcQueueIndex(data []byte) int {
+	if len(data) < 1 {
+		return -1
+	}
+	return hidrpc.GetQueueIndex(hidrpc.MessageType(data[0]))
+}
+
 func handleHidRPCMessage(message hidrpc.Message, session *Session) {
 	var rpcErr error
 
@@ -21,7 +39,7 @@ func handleHidRPCMessage(message hidrpc.Message, session *Session) {
 			logger.Warn().Err(err).Msg("failed to marshal handshake message")
 			return
 		}
-		if err := session.HidChannel.Send(message); err != nil {
+		if err := session.sendHID(message); err != nil {
 			logger.Warn().Err(err).Msg("failed to send handshake message")
 			return
 		}
@@ -189,11 +207,11 @@ func reportHidRPC(params any, session *Session) {
 		return
 	}
 
-	if !session.hidRPCAvailable || session.HidChannel == nil {
-		// Expected during WebRTC handshake before HID channel is ready
+	if !session.hidRPCAvailable || !session.hidReady() {
+		// Expected during the handshake before the HID channel is ready
 		logger.Debug().
 			Bool("hidRPCAvailable", session.hidRPCAvailable).
-			Bool("HidChannel", session.HidChannel != nil).
+			Bool("hidReady", session.hidReady()).
 			Msg("HID RPC is not available, skipping reportHidRPC")
 		return
 	}
@@ -223,7 +241,7 @@ func reportHidRPC(params any, session *Session) {
 		return
 	}
 
-	if err := session.HidChannel.Send(message); err != nil {
+	if err := session.sendHID(message); err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
 			logger.Debug().Err(err).Msg("HID RPC channel closed, skipping reportHidRPC")
 			return

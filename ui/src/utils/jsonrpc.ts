@@ -1,5 +1,6 @@
 import { useRTCStore } from "@/hooks/stores";
 import { sleep } from "@/utils";
+import type { DataChannelLike } from "@/transport/types";
 
 // JSON-RPC utility for use outside of React components
 
@@ -26,9 +27,9 @@ let rpcCallCounter = 0;
 // Helper: wait for RTC data channel to be ready
 // This waits indefinitely for the channel to be ready, only aborting via the signal
 // Throws if the channel instance changed while waiting (stale connection detected)
-async function waitForRtcReady(signal: AbortSignal): Promise<RTCDataChannel> {
+async function waitForRtcReady(signal: AbortSignal): Promise<DataChannelLike> {
   const pollInterval = 100;
-  let lastSeenChannel: RTCDataChannel | null = null;
+  let lastSeenChannel: DataChannelLike | null = null;
 
   while (!signal.aborted) {
     const state = useRTCStore.getState();
@@ -70,7 +71,7 @@ async function waitForRtcReady(signal: AbortSignal): Promise<RTCDataChannel> {
 
 // Helper: send RPC request and wait for response
 async function sendRpcRequest<T>(
-  rpcDataChannel: RTCDataChannel,
+  rpcDataChannel: DataChannelLike,
   options: JsonRpcCallOptions,
   signal: AbortSignal,
 ): Promise<JsonRpcCallResponse<T>> {

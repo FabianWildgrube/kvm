@@ -7,6 +7,7 @@ import (
 	"github.com/jetkvm/kvm/internal/diagnostics"
 	"github.com/jetkvm/kvm/internal/native"
 	"github.com/jetkvm/kvm/internal/sync"
+	"github.com/jetkvm/kvm/internal/videofanout"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pion/webrtc/v4/pkg/media"
@@ -15,6 +16,11 @@ import (
 var (
 	nativeInstance native.NativeInterface
 	nativeCmdLock  = sync.Mutex{}
+
+	// videoHub distributes encoded frames to consumers other than the
+	// WebRTC track, currently the WebSocket transport. It is inert until
+	// something subscribes.
+	videoHub = videofanout.NewHub()
 )
 
 func initNative(systemVersion *semver.Version, appVersion *semver.Version) {
@@ -69,12 +75,15 @@ func initNative(systemVersion *semver.Version, appVersion *semver.Version) {
 			}
 		},
 		OnVideoFrameReceived: func(frame []byte, duration time.Duration) {
-			if currentSession != nil {
+			// WebRTC consumes the frame synchronously, so it can borrow the
+			// caller's buffer. The fan-out copies for anyone else.
+			if currentSession != nil && currentSession.VideoTrack != nil {
 				err := currentSession.VideoTrack.WriteSample(media.Sample{Data: frame, Duration: duration})
 				if err != nil {
 					nativeLogger.Warn().Err(err).Msg("error writing sample")
 				}
 			}
+			videoHub.Publish(frame, duration)
 		},
 		GetSessionInfo: func() diagnostics.SessionInfo {
 			info := diagnostics.SessionInfo{

@@ -1,5 +1,7 @@
 import { useCallback, useRef } from "react";
 
+import type { DataChannelLike } from "@/transport/types";
+
 import {
   KeyboardLedStateMessage,
   KeyboardMacroStateMessage,
@@ -38,7 +40,7 @@ const MACRO_CHUNK_GRACE_MS = 2000;
 // All hook instances share the device's single macro runner, including after
 // a paste popover unmounts. Replacements wait for the previous chunk to stop.
 let remoteMacro: { controller: AbortController; done: Promise<void> } | null = null;
-let macroChunk: { channel: RTCDataChannel; onState: (running: boolean) => void } | null = null;
+let macroChunk: { channel: DataChannelLike; onState: (running: boolean) => void } | null = null;
 
 export interface MacroStep {
   keys: string[] | null;

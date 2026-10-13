@@ -9,6 +9,7 @@
  */
 
 import { KeyboardLedState, KeysDownState } from "@/hooks/stores";
+import type { DataChannelLike } from "@/transport/types";
 
 /** Internal handlers set by React components (prefixed with _ to indicate internal use) */
 interface TestHooksInternal {
@@ -23,7 +24,7 @@ interface TestHooksInternal {
   _getHdmiState?: () => string;
   _getVideoElement?: () => HTMLVideoElement | null;
   _getKvmTerminal?: () => RTCDataChannel | null;
-  _getRpcDataChannel?: () => RTCDataChannel | null;
+  _getRpcDataChannel?: () => DataChannelLike | null;
   _getPeerConnection?: () => RTCPeerConnection | null;
 }
 
@@ -400,7 +401,7 @@ export function registerTestHandlers(handlers: {
   getHdmiState: () => string;
   getVideoElement: () => HTMLVideoElement | null;
   getKvmTerminal: () => RTCDataChannel | null;
-  getRpcDataChannel: () => RTCDataChannel | null;
+  getRpcDataChannel: () => DataChannelLike | null;
   getPeerConnection: () => RTCPeerConnection | null;
 }): void {
   if (!window.__kvmTestHooks) return;

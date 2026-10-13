@@ -65,6 +65,7 @@ import { doRpcHidHandshake, useHidRpc } from "@hooks/useHidRpc";
 import useKeyboard from "@hooks/useKeyboard";
 import { registerTestHandlers, cleanupTestHooks } from "@/test/testHooks";
 import { useSignaling } from "@/webrtc/signaling";
+import { isWsTransportForced, useWsStreamTransport } from "@hooks/useWsStreamTransport";
 
 export type AuthMode = "password" | "noPassword" | null;
 
@@ -171,6 +172,7 @@ export default function KvmIdRoute() {
     setRpcHidProtocolVersion,
     terminalChannel,
     setTerminalChannel,
+    wsTransportActive,
   } = useRTCStore();
 
   const location = useLocation();
@@ -277,6 +279,13 @@ export default function KvmIdRoute() {
     [iceConfig?.iceServers],
   );
 
+  // Fall back to the WebSocket transport when WebRTC cannot connect. On a
+  // network that reaches the device through an application-level tunnel
+  // there is no IP path for ICE to pair, so retrying cannot help; the
+  // fallback rides the same connection that served this page. Forcing it
+  // skips the doomed WebRTC attempt entirely.
+  const forceWsTransport = useMemo(() => isWsTransportForced(), []);
+
   const {
     connect: setupPeerConnection,
     loadingMessage,
@@ -285,7 +294,10 @@ export default function KvmIdRoute() {
     deviceId: params.id,
     iceServers,
     onPeerConnection: attachPeerConnection,
+    enabled: !forceWsTransport,
   });
+
+  useWsStreamTransport(forceWsTransport || connectionFailed);
 
   // Cleanup effect
   const { clearInboundRtpStats, clearCandidatePairStats } = useRTCStore();
@@ -693,15 +705,18 @@ export default function KvmIdRoute() {
       return <PeerConnectionDisconnectedOverlay show={true} />;
     }
 
-    if (hasConnectionFailed)
+    // Once the WebSocket transport has taken over, the WebRTC attempt that
+    // failed is no longer the session; its failure must not be reported.
+    if (hasConnectionFailed && !wsTransportActive)
       return <ConnectionFailedOverlay show={true} setupPeerConnection={setupPeerConnection} />;
 
-    if (isPeerConnectionLoading) {
+    if (isPeerConnectionLoading || wsTransportActive) {
       return <LoadingConnectionOverlay show={true} text={loadingMessage} />;
     }
 
     return null;
   }, [
+    wsTransportActive,
     location.pathname,
     rebootState?.isRebooting,
     rebootState?.postRebootAction,

@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog"
 
 	"github.com/jetkvm/kvm/internal/hidrpc"
@@ -62,7 +61,11 @@ func writeJSONRPCResponse(response JSONRPCResponse, session *Session) {
 		jsonRpcLogger.Warn().Err(err).Msg("Error marshalling JSONRPC response")
 		return
 	}
-	err = session.RPCChannel.SendText(string(responseBytes))
+	if !session.rpcReady() {
+		jsonRpcLogger.Debug().Msg("RPC channel not available, dropping response")
+		return
+	}
+	err = session.sendRPCText(string(responseBytes))
 	if err != nil {
 		jsonRpcLogger.Warn().Err(err).Msg("Error sending JSONRPC response")
 		return
@@ -80,7 +83,7 @@ func writeJSONRPCEvent(event string, params any, session *Session) {
 		jsonRpcLogger.Warn().Err(err).Msg("Error marshalling JSONRPC event")
 		return
 	}
-	if session == nil || session.RPCChannel == nil {
+	if !session.rpcReady() {
 		jsonRpcLogger.Info().Msg("RPC channel not available")
 		return
 	}
@@ -92,14 +95,14 @@ func writeJSONRPCEvent(event string, params any, session *Session) {
 
 	scopedLogger.Trace().Msg("sending JSONRPC event")
 
-	err = session.RPCChannel.SendText(requestString)
+	err = session.sendRPCText(requestString)
 	if err != nil {
 		scopedLogger.Warn().Err(err).Msg("error sending JSONRPC event")
 		return
 	}
 }
 
-func onRPCMessage(message webrtc.DataChannelMessage, session *Session) {
+func onRPCMessage(message dataMessage, session *Session) {
 	var request JSONRPCRequest
 	err := json.Unmarshal(message.Data, &request)
 	if err != nil {

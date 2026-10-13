@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { Logger } from "tslog";
 
 import { useRTCStore } from "@hooks/stores";
+import type { DataChannelLike } from "@/transport/types";
 
 import {
   CancelKeyboardMacroReportMessage,
@@ -31,7 +32,7 @@ const HANDSHAKE_MAX_ATTEMPTS = 10;
 const logger = new Logger({ name: "hidrpc" });
 
 export function doRpcHidHandshake(
-  rpcHidChannel: RTCDataChannel,
+  rpcHidChannel: DataChannelLike,
   setRpcHidProtocolVersion: (version: number | null) => void,
 ) {
   let attempts = 0;
@@ -320,7 +321,10 @@ export function useHidRpc(onHidRpcMessage?: (payload: RpcMessage) => void) {
     };
 
     const errorHandler = (e: Event) => {
-      console.error(`Error on rpcHidChannel '${rpcHidChannel.label}': ${e}`);
+      // Log the event type, not the Event itself: interpolating an object
+      // yields "[object Object]". Matches how the other channels report
+      // errors in devices.$id.tsx.
+      console.error(`Error on rpcHidChannel '${rpcHidChannel.label}': ${e.type}`);
     };
 
     rpcHidChannel.addEventListener("message", messageHandler);

@@ -55,6 +55,7 @@ export const useWebSocketSignaling: SignalingHook = ({
   deviceId,
   iceServers,
   onPeerConnection,
+  enabled,
 }) => {
   const { setPeerConnection, peerConnectionState, setPeerConnectionState, setMediaStream } =
     useRTCStore();
@@ -264,10 +265,17 @@ export const useWebSocketSignaling: SignalingHook = ({
 
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
+  // A null URL tells react-use-websocket not to connect at all, which is how
+  // the adapter stays dormant when another transport owns the session.
+  const signalingUrl =
+    enabled === false
+      ? null
+      : isOnDevice
+        ? `${wsProtocol}//${window.location.host}/webrtc/signaling/client`
+        : `${CLOUD_API.replace("http", "ws")}/webrtc/signaling/client?id=${deviceId}`;
+
   const { sendMessage, getWebSocket } = useWebSocket(
-    isOnDevice
-      ? `${wsProtocol}//${window.location.host}/webrtc/signaling/client`
-      : `${CLOUD_API.replace("http", "ws")}/webrtc/signaling/client?id=${deviceId}`,
+    signalingUrl,
     {
       heartbeat: true,
       retryOnError: true,

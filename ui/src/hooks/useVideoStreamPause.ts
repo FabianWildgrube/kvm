@@ -2,8 +2,9 @@ import { useEffect } from "react";
 
 import { useJsonRpc } from "@hooks/useJsonRpc";
 import { useRTCStore } from "@hooks/stores";
+import type { DataChannelLike } from "@/transport/types";
 
-const pauseLeaseCounts = new WeakMap<RTCDataChannel, number>();
+const pauseLeaseCounts = new WeakMap<DataChannelLike, number>();
 
 /**
  * Pauses the device's video stream while a memory-hungry view is mounted,

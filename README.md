@@ -11,6 +11,12 @@
 
 </div>
 
+## WebSocket video transport
+
+This build adds a WebSocket fallback for networks where WebRTC cannot connect at all. When the browser reaches the device through an application-level tunnel (ZTNA/SASE products such as Zscaler), it has no IP route to the device, so ICE can never pair a candidate — signalling succeeds over HTTP while media has nowhere to go. The device therefore also serves video, JSON-RPC and HID over the single client-initiated connection that already loaded the UI (`GET /stream/ws`): H.264 is muxed into fragmented MP4 and played through Media Source Extensions, with no UDP, no second port and no inbound connection. It engages automatically when WebRTC fails, or immediately with `?transport=ws`. Audio, terminal, serial and file upload remain WebRTC-only.
+
+To deploy, first give the device your SSH key — paste `~/.ssh/id_ed25519.pub` (create one with `ssh-keygen -t ed25519`) into Settings → Advanced → Developer Mode in the web UI, since `dev_deploy.sh` opens about fifteen separate SSH connections and would otherwise prompt for a password each time. For a temporary test run, `./dev_deploy.sh -r <device-ip> --skip-native-build` builds and runs the binary in the foreground with logs streaming to your terminal; Ctrl-C stops it and a reboot restores the stock app, so nothing on the device is overwritten. To install permanently, `./dev_deploy.sh -r <device-ip> -i` builds a release binary, stages it exactly as the OTA updater would, and reboots the device.
+
 JetKVM is a high-performance, open-source KVM over IP (Keyboard, Video, Mouse) solution designed for efficient remote management of computers, servers, and workstations. Whether you're dealing with boot failures, installing a new operating system, adjusting BIOS settings, or simply taking control of a machine from afar, JetKVM provides the tools to get it done effectively.
 
 ## Features

@@ -200,6 +200,10 @@ func setupRouter() *gin.Engine {
 	protected.Use(protectedMiddleware())
 	{
 		protected.GET("/webrtc/signaling/client", handleLocalWebRTCSignal)
+		// Fallback transport for networks where WebRTC cannot connect at
+		// all. Same origin, same port, client-initiated; see
+		// websocket_stream.go.
+		protected.GET("/stream/ws", handleStreamWebSocket)
 		protected.POST("/cloud/register", handleCloudRegister)
 		protected.GET("/cloud/state", handleCloudState)
 		protected.GET("/device", handleDevice)
@@ -443,8 +447,11 @@ func handleWebRTCSignalWsMessages(
 
 			l.Info().Str("data", fmt.Sprintf("%v", candidate)).Msg("unmarshalled incoming ICE candidate")
 
-			if currentSession == nil {
-				l.Warn().Msg("no current session, skipping incoming ICE candidate")
+			if currentSession == nil || currentSession.peerConnection == nil {
+				// A WebSocket-transport session has no peer connection, so a
+				// late candidate from a WebRTC attempt it replaced has
+				// nowhere to go.
+				l.Warn().Msg("no current WebRTC session, skipping incoming ICE candidate")
 				continue
 			}
 

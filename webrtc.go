@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jetkvm/kvm/internal/diagnostics"
-	"github.com/jetkvm/kvm/internal/hidrpc"
 	"github.com/jetkvm/kvm/internal/logging"
 	"github.com/jetkvm/kvm/internal/playoutdelay"
 	"github.com/jetkvm/kvm/internal/sync"
@@ -33,7 +32,12 @@ type Session struct {
 	HidChannel               *webrtc.DataChannel
 	shouldUmountVirtualMedia bool
 
-	rpcQueue chan webrtc.DataChannelMessage
+	// ws is set instead of the data channels above when the session is
+	// carried by the WebSocket transport. Exactly one of the two is in use
+	// for the life of a session; see session.go.
+	ws *wsTransport
+
+	rpcQueue chan dataMessage
 
 	hidRPCAvailable          bool
 	lastKeepAliveArrivalTime time.Time  // Track when last keep-alive packet arrived
@@ -118,11 +122,6 @@ func (s *Session) resetKeepAliveTime() {
 	defer s.keepAliveJitterLock.Unlock()
 	s.lastKeepAliveArrivalTime = time.Time{} // Reset keep-alive timing tracking
 	s.lastTimerResetTime = time.Time{}       // Reset auto-release timer tracking
-}
-
-type hidQueueMessage struct {
-	webrtc.DataChannelMessage
-	channel string
 }
 
 type SessionConfig struct {
@@ -351,7 +350,7 @@ func (s *Session) enqueueKeysDownState(state usbgadget.KeysDownState) {
 	}
 }
 
-func (s *Session) enqueueRPCMessage(msg webrtc.DataChannelMessage) bool {
+func (s *Session) enqueueRPCMessage(msg dataMessage) bool {
 	if s == nil || s.rpcQueue == nil || s.isClosed() {
 		return false
 	}
@@ -405,7 +404,7 @@ func getOnHidMessageHandler(session *Session, scopedLogger *zerolog.Logger, chan
 		// Cancel before admitting the next message on this ordered channel.
 		// A separate worker can process a late cancel after the old macro has
 		// finished and its replacement has started, canceling the replacement.
-		if hidrpc.MessageType(msg.Data[0]) == hidrpc.TypeCancelKeyboardMacroReport {
+		if hidrpcIsCancelMacro(msg.Data) {
 			if !session.isClosed() {
 				rpcCancelKeyboardMacro()
 			}
@@ -413,15 +412,15 @@ func getOnHidMessageHandler(session *Session, scopedLogger *zerolog.Logger, chan
 		}
 
 		// Enqueue to ensure ordered processing
-		queueIndex := hidrpc.GetQueueIndex(hidrpc.MessageType(msg.Data[0]))
+		queueIndex := hidrpcQueueIndex(msg.Data)
 		if queueIndex >= len(session.hidQueue) || queueIndex < 0 {
 			l.Warn().Int("queueIndex", queueIndex).Msg("received data in HID RPC message handler, but queue index not found")
 			queueIndex = 3
 		}
 
 		if ok := session.enqueueHidMessage(queueIndex, hidQueueMessage{
-			DataChannelMessage: msg,
-			channel:            channel,
+			dataMessage: dataMessage{Data: msg.Data, IsString: msg.IsString},
+			channel:     channel,
 		}); !ok {
 			l.Warn().Int("queueIndex", queueIndex).Msg("received data in HID RPC message handler, but queue is nil")
 			return
@@ -518,36 +517,8 @@ func newSession(config SessionConfig) (*Session, error) {
 		return nil, err
 	}
 
-	session := &Session{
-		peerConnection: peerConnection,
-		done:           make(chan struct{}),
-		rpcQueue:       make(chan webrtc.DataChannelMessage, 256),
-	}
-	session.initQueues()
-	session.initKeysDownStateQueue()
-
-	rpcQueue := session.rpcQueue
-	go func() {
-		for {
-			select {
-			case <-session.done:
-				return
-			default:
-			}
-
-			select {
-			case <-session.done:
-				return
-			case msg := <-rpcQueue:
-				// TODO: only use goroutine if the task is asynchronous
-				go onRPCMessage(msg, session)
-			}
-		}
-	}()
-
-	for _, queue := range session.hidQueue {
-		go session.handleHidQueue(queue)
-	}
+	session := newBaseSession()
+	session.peerConnection = peerConnection
 
 	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
 		defer func() {
@@ -571,7 +542,7 @@ func newSession(config SessionConfig) (*Session, error) {
 			session.RPCChannel = d
 			d.OnMessage(func(msg webrtc.DataChannelMessage) {
 				// Enqueue to ensure ordered processing
-				session.enqueueRPCMessage(msg)
+				session.enqueueRPCMessage(dataMessage{Data: msg.Data, IsString: msg.IsString})
 			})
 			// Wait for channel to be open before sending initial state
 			d.OnOpen(func() {

@@ -10,6 +10,12 @@ static/*
 device-tests.tar.gz
 node_modules
 
+# downloaded toolchains and other archives; staging one of these breaks the
+# lint-staged pre-commit hook
+*.tar.gz
+*.tar.xz
+*.tgz
+
 # generated during the build process
 #internal/native/include
 #internal/native/lib

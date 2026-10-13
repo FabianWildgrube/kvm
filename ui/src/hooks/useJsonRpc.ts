@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 
 import { useRTCStore, useFailsafeModeStore } from "@hooks/stores";
+import type { DataChannelLike } from "@/transport/types";
 
 export interface JsonRpcRequest {
   jsonrpc: string;
@@ -56,10 +57,10 @@ const blockedMethodsByReason: Record<string, string[]> = {
 // ...) as soon as the rpc channel opens, but useJsonRpc attaches its listener
 // in an effect that runs after the channel is stored on open. A DataChannel
 // message with no listener is lost, so the channel's creator holds them.
-const heldEvents = new WeakMap<RTCDataChannel, { events: JsonRpcRequest[]; stop: () => void }>();
+const heldEvents = new WeakMap<DataChannelLike, { events: JsonRpcRequest[]; stop: () => void }>();
 
 // Call right after creating the rpc channel, before it can open.
-export function holdRpcEvents(channel: RTCDataChannel) {
+export function holdRpcEvents(channel: DataChannelLike) {
   const events: JsonRpcRequest[] = [];
   const hold = (e: MessageEvent) => {
     try {
